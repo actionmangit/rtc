@@ -1,21 +1,27 @@
-<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01 Transitional//EN" "http://www.w3.org/TR/html4/loose.dtd">
+<!DOCTYPE html>
 <html>
 <head>
 <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
 <title>Insert title here</title>
 </head>
 <body>
-	<video id="v1" width="120" height="90" autoplay muted></video>
-	<video id="v2" width="120" height="90" autoplay></video>
-	<video id="v3" width="120" height="90" autoplay></video></br>
+	<video id="v1" width="640" height="480" autoplay></video>
+	<video id="v2" width="640" height="480" autoplay></video>
+	<video id="v3" width="640" height="480" autoplay style="display:none;"></video>
+	<video id="v4" width="640" height="480" autoplay style="display:none;"></video>
+	<br/>
+	<input type="radio" name="customerType" value="sender" checked id="senderRadio" onclick="changeBtnForSender()"/>
+	<label for="senderRadio">Sender</label>
+	<input type="radio" name="customerType" value="receiver" id="receiverRadio" onclick="changeBtnForReceiver()"/>
+	<label for="receiverRadio">Receiver</label><br/>
 	<label>roomNo : </label><input id="roomNo" type="text" />
-	<button id="button" onclick="connect()">Join</button></br>
-	<button id="button0" onclick="call()" disabled>Call</button>
-	<button id="button1" onclick="addTrack1()" disabled>AddTrack1</button>
-	<button id="button2" onclick="addTrack2()" disabled>AddTrack2</button>
-	<button id="removeAddButton" onclick="removeAdd()" disabled>Remove+Add</button>
-	<button id="flipButton" onclick="flip()" disabled>ReplaceTrack (FF only)</button>
-	<div id="div"><p></div><br>
+	<button id="joinBtn" onclick="connect()">Join</button><br/>
+	<button id="addBtn1" onclick="addTrack1()" disabled>Add1stVideo</button>
+	<button id="addBtn2" onclick="addTrack2()" disabled>Add2ndVideo</button>
+	<button id="callBtn" onclick="call()" disabled>Call</button>
+<!-- 	<button id="removeAddButton" onclick="removeAdd()" disabled>Remove+Add</button> -->
+<!-- 	<button id="flipButton" onclick="flip()" disabled>ReplaceTrack (FF only)</button> -->
+	<div id="div"><p></div><br/>
 	<table><tr><td><div id="div2">Not connected</div></td>
 	  <td><input id="chat" disabled></input></td></tr></table><br>
 	<script src="/webjars/adapter.js"></script>
@@ -26,101 +32,39 @@
 		window.onbeforeunload = function(e) {
 			disconnect();
 			window.location.href = '/logout';
-		};	
-	
-		roomNo.value = "";
-		button.disabled = false;
-		button2.disabled = true;
-		removeAddButton.disabled = true;
-		flipButton.disabled = true;
+		};
 		
-		var	count			= 0;
+		//초기화
+		roomNo.value				= "";
+		joinBtn.disabled			= false;
+		addBtn1.disabled			= true;
+		addBtn2.disabled			= true;
+// 		removeAddButton.disabled	= true;
+// 		flipButton.disabled			= true;
+		
+		var joinedRoom			= {};
+		var	count				= 0;
 		var	deviceInfo;
-		var constraints		= [];
+		var videoConstraints	= [];//카메라 제약 정보
+		var localStreams 		= [];//카메라 스트림
+		var	remoteStreams		= [];//수신카메라 스트림
+		var isReceiver			= false;
 		
-		navigator.mediaDevices.enumerateDevices().then(e => {
-			console.log('enumerateDevices'); 
-			
-			for (var i = 0; i < e.length; i++) {
-				if (e[i].kind == 'videoinput')
-					constraints.push({'video': {'deviceId' : e[i].deviceId ? {'exact' : e[i].deviceId} : undefined}});
-			}
-			
-			console.log(constraints.length);
-			
-			if (constraints.length > 1) {
-				var haveGum = navigator.mediaDevices.getUserMedia(constraints[1])
-				.then(stream => streams[1] = stream)
-				.then(() => navigator.mediaDevices.getUserMedia(constraints[0]))
-				.then(stream => v1.srcObject = streams[0] = stream);			
-			}
-			else {
-				var haveGum = navigator.mediaDevices.getUserMedia(constraints[0])
-				.then(stream => v1.srcObject = streams[0] = stream);
-			}
-			
-		}).catch(e => console.log(e));
-	
-		var config = { iceServers: [{"urls":["turn:74.125.23.127:19305?transport=udp","turn:[2404:6800:4008:C02::7F]:19305?transport=udp","turn:74.125.23.127:443?transport=tcp","turn:[2404:6800:4008:C02::7F]:443?transport=tcp"],"username":"CK+QkccFEgYbJ1zsUDMYzc/s6OMTIICjBQ","credential":"nmwQuSOD5/KW4G0PQ9vZOgkVeMY="},{"urls":["stun:stun.l.google.com:19302"]}] };
-		var signalingDelayMs = 0;
+		var pc;
+		var pcConfig			= {'iceServers':[
+									{urls:'stun:stun1.l.google.com:19302'},
+									{
+										urls: 'turn:192.158.29.39:3478?transport=udp',
+										credential: 'JZEOEt2V3Qb0y27GRntt2u2PAYA=',
+										username: '28224511:1379330808'
+									}]};
+		var negotiating;
+		var signalingDelayMs	= 0;
 		
-		var dc, pc = new RTCPeerConnection(config);
-		pc.ontrack = e => {
-
-			console.log('pc.ontrack');
-			console.log('count = ' + count);
-			
-			if (count == 0)
-				v2.srcObject = e.streams[0];
-			else if (count == 1)
-				v3.srcObject = e.streams[0];
-			
-			if (count > 1)
-				v2.srcObject = e.streams[0];
-			
-			count++;
-		};
-		pc.ondatachannel = e => {
-			console.log('pc.ondatachannel');
-			
-			dcInit(dc = e.channel);
-		};
-		
-		var streams = [];
-		
-		pc.oniceconnectionstatechange = () => {
-			console.log('pc.oniceconnectionstatechange');
-			console.log(pc.iceConnectionState);
-			update(pc.iceConnectionState);
-		};
-		
-		var negotiating; // Chrome workaround
-		pc.onnegotiationneeded = () => {
-		  console.log('pc.onnegotiationneeded');
-		  console.log(!!negotiating);
-		  if (negotiating) return;
-		  negotiating = true;
-// 		  pc.createOffer().then(d => pc.setLocalDescription(d))
-// 		  .then(() => {
-// 			  console.log('localDescription');
-// 			  console.log(JSON.stringify(pc.localDescription));
-			  
-// 			  stompClient.send("/app/sendOffer", {}, JSON.stringify(pc.localDescription));
-// 		  })
-// 		  .catch(msg => {
-// 			  console.log('onnegotiationneeded');
-// 			  console.log(msg);
-// 		  });
-		};
-		pc.onsignalingstatechange = () => {
-			console.log('pc.onsignalingState');
-			console.log(pc.signalingState != "stable");
-			negotiating = pc.signalingState != "stable";
-		}
-		
-		var		stompClient	= null;
+		var stompClient			= null;
 		
 		function connect() {
+			
 		    var socket		= new SockJS('/rtc');
 		    stompClient		= Stomp.over(socket);
 		    stompClient.connect({}, function (frame) {
@@ -129,16 +73,38 @@
 		        console.log('userName: ' + frame.headers['user-name']);
 
 		        stompClient.subscribe('/user/queue/joinRoom', msg => {
-		            var		room	= JSON.parse(msg.body);
-		            
-		            button.disabled = true;
-		            
-					if (room.attendees.length > 1) {
-						button0.disabled = false;
-					}
-					else {
-						button0.disabled = true;						
-					}
+		        	var		room	= JSON.parse(msg.body);
+		        	
+		        	//회의 첫 입장이라면
+		        	if (typeof joinedRoom.roomNo === 'undefined') {
+
+		        		//참석버튼 비활성화
+			            joinBtn.disabled = true;
+		        		//pc 커넥션 생성
+			            makePc();
+		        		
+		        		// 수신자가 아니라면
+		        		if (!isReceiver) {
+		        			
+				            //카메라 영상 정보 가져옴
+							navigator.mediaDevices.enumerateDevices().then(sourceInfo => {
+								
+								console.log(sourceInfo);
+								
+								for (var i = 0; i < sourceInfo.length; i++) {
+									if (sourceInfo[i].kind == 'videoinput') {
+										videoConstraints.push({'video': {'deviceId' : sourceInfo[i].deviceId ? {'exact' : sourceInfo[i].deviceId} : undefined}});
+									}
+								}
+								
+								getUserMedia();
+									
+							}).catch(e => console.log(e));
+		        		}
+		        	}
+
+	        		//회의정보 저장
+	        		joinedRoom	= room;
 		        });
 		        
 		        stompClient.subscribe('/user/queue/sdp', msg => {
@@ -146,38 +112,26 @@
 		        	var desc = new RTCSessionDescription(JSON.parse(msg.body));
 		        	
 		        	if (desc.type == "offer") {
-		        		console.log('offerSdp');
-		        		console.log(desc);
-		        		
-		        		console.log(!!pc.onicecandidate)
 		        		
 		        		if (!pc.onicecandidate) {
-		        			console.log('+++++++++++++++++++++++++++++++++++++++++++++++++');
 		        			
 				        	pc.onicecandidate = e => {
-								console.log('pc.onicecandidate');  
-								console.log(e.candidate);  
 								
 								if (e.candidate)
 									sendIce(e.candidate);
 							};
-							
-							console.log('addStream');
-		        			pc.addStream(streams[0]);
-		        		}
-		        		else {
-// 		        			console.log('addStream');
-// 		        			pc.addStream(streams[0]);
 		        		}
 							
-			        	pc.setRemoteDescription(desc).then(() => pc.createAnswer())
-				        .then(answer => pc.setLocalDescription(answer)).then(() => {
-				        	
-				        	console.log('Answer SDP');
-				    		console.log(pc.localDescription);
-				    		
-				    		sendSdpAnswer(pc.localDescription);
-				        }).catch(e => console.log(e));
+			        	pc.setRemoteDescription(desc)
+			        		.then(function() {
+			        			pc.createAnswer()
+			        				.then(answer => {
+										console.log(answer);
+							        	
+							        	pc.setLocalDescription(answer);
+							    		sendSdpAnswer(answer);
+			        				}).catch(e => console.log(e));
+			        		}).catch(e => console.log(e));
 			        }
 		        	else {
 		        		console.log('answerSdp');
@@ -196,30 +150,83 @@
 		    });
 		}
 		
+		function getUserMedia() {
+			
+			return new Promise((resolve, reject) => {
+				navigator.mediaDevices.getUserMedia(videoConstraints[count])
+				.then(stream => {
+					localStreams.push(stream);
+					
+					//자신의 비디오 보여줌
+					document.getElementById('v' + (count + 1)).srcObject		= stream;
+					
+					//스트림 갯수에 따라 버튼 활성화
+					document.getElementById('addBtn' + (count + 1)).disabled	= false;
+					
+					count++;
+					
+					if (videoConstraints.length == (count)) {
+						return resolve();
+					}
+					else {
+						return getUserMedia();
+					}
+				});			
+			});
+		}
+		
+		function makePc() {
+			pc = new RTCPeerConnection(pcConfig);
+			
+			pc.ontrack = data => {
+				if (isReceiver) {
+					remoteStreams.push(data.streams[0]);
+					
+					document.getElementById('v' + (remoteStreams.length + 2)).srcObject	= data.streams[0];
+				}
+			};
+			
+			pc.oniceconnectionstatechange = () => {
+				update(pc.iceConnectionState);
+			};
+			
+			 // Chrome workaround
+			pc.onnegotiationneeded = () => {
+			  if (negotiating) return;
+			  negotiating = true;
+			};
+			
+			pc.onsignalingstatechange = () => {
+				console.log('pc.onsignalingState');
+				negotiating = pc.signalingState != "stable";
+			}
+			
+			console.log('makePc');
+		}
+		
 		function call() {
-			button0.disabled = true;
-			button1.disabled = false;
+			if (joinedRoom.attendees.length < 2) {
+				alert('Just one attendee');
+				return;
+			}
+			
+			callBtn.disabled = true;
+			addBtn1.disabled = true;
+			addBtn2.disabled = true;
 			
 			pc.onicecandidate = e => {
-				console.log('pc.onicecandidate');  
-				console.log(e.candidate);  
-				
 				if (e.candidate)
 					sendIce(e.candidate);
 			};
 			  
-// 			dcInit(dc = pc.createDataChannel("chat"));
-			pc.addStream(streams[0]);
 			creteOffer();
 		}
 		
 		function creteOffer() {
-			pc.createOffer().then(d => pc.setLocalDescription(d))
-			.then(() => {
-				console.log('localDescription');
-				console.log(JSON.stringify(pc.localDescription));
-				  
-				stompClient.send("/app/sendOffer", {}, JSON.stringify(pc.localDescription));
+			pc.createOffer({'offerToReceiveAudio':false, 'offerToReceiveVideo':false}).then(d => {
+				pc.setLocalDescription(d);
+				
+				stompClient.send("/app/sendOffer", {}, JSON.stringify(d));
 			})
 			.catch(msg => {
 				console.log('onnegotiationneeded');
@@ -246,46 +253,35 @@
 			stompClient.send("/app/sendIce", {}, JSON.stringify(ice));
 		}
 		
-		function dcInit() {
-		  dc.onopen = () => {
-		    update("Chat:"); chat.disabled = false; chat.select();
-		  };
-		  dc.onmessage = e => {
-			  console.log(e.data);
-			  log(e.data)
-		  };
-		}
-		
 		function createOffer() {
 		  console.log('createOffer()');	
 			
-		  button.disabled = true;
-		  
-		  dcInit(dc = pc.createDataChannel("chat"));
-		};
-		
-		chat.onkeypress = e => {
-		  if (e.keyCode != 13) return;
-		  dc.send(chat.value);
-		  log("> " + chat.value);
-		  chat.value = "";
+		  joinBtn.disabled = true;
 		};
 		
 		function addTrack1() {
-		  console.log('addTrack111111111');
-		  pc.addStream(streams[0]);
-		  creteOffer();
-		  
-		  button2.disabled=false;
-		  flipButton.disabled = false;
-		  removeAddButton.disabled = false;
+			pc.addStream(localStreams[0]);
+			
+			addBtn1.disabled 	= true;
+			
+    		// 수신자가 아니라면
+    		if (!isReceiver) {
+   				//연결 버튼 활성화
+   				callBtn.disabled	= false;
+    		}			
 		}
 		
 		function addTrack2() {
-		  console.log('addTrack222222222');
-		  pc.addStream(streams[1]);
-		  creteOffer();
-		}		
+			pc.addStream(localStreams[1]);
+			
+			addBtn2.disabled 	= true;	
+			
+    		// 수신자가 아니라면
+    		if (!isReceiver) {
+   				//연결 버튼 활성화
+   				callBtn.disabled	= false;
+    		}			
+		}
 		
 		var flipped = 0;
 		function flip() {
@@ -321,6 +317,30 @@
 		var wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 		var update = msg => div2.innerHTML = msg;
 		var log = msg => div.innerHTML += msg + "<br>";	
+		
+		function changeBtnForReceiver() {
+			isReceiver				= true;
+			
+			addBtn1.style.display	= 'none';
+			addBtn2.style.display	= 'none';
+			callBtn.style.display	= 'none';
+			v1.style.display		= 'none';
+			v2.style.display		= 'none';
+			v3.style.display		= 'inline';
+			v4.style.display		= 'inline';
+		}
+		
+		function changeBtnForSender() {
+			isReceiver				= false;
+			
+			addBtn1.style.display	= 'inline';
+			addBtn2.style.display	= 'inline';
+			callBtn.style.display	= 'inline';
+			v1.style.display		= 'inline';
+			v2.style.display		= 'inline';
+			v3.style.display		= 'none';
+			v4.style.display		= 'none';
+		}
 	</script>	
 </body>
 </html>

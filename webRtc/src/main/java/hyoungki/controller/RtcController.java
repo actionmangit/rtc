@@ -29,7 +29,7 @@ public class RtcController {
 	                                                  
 	@MessageMapping("/joinRoom")
 //	@SendToUser("/queue/joinRoom")
-	public Room joinRoom (@Payload Room room, Principal principal) throws Exception {
+	public void joinRoom (@Payload Room room, Principal principal) throws Exception {
 		
 		logger.info("name = " + principal.getName());
 		logger.info("roomInfo = " + room.toString());
@@ -39,13 +39,14 @@ public class RtcController {
 		List<String>	attendees	= AuthMap.getSessionIdList(room.getRoomNo()); 
 		
 		room.setAttendees(attendees);
+		room.setLastAttendee(principal.getName());
 		
 		for (String id : attendees) {
 			logger.info("userName = " + id);
 			this.template.convertAndSendToUser(id, "/queue/joinRoom", room);
 		}		
 		
-		return room;
+//		return room;
 	}
 	
 	@MessageMapping("/sendOffer")
